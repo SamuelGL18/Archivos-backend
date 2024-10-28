@@ -1,99 +1,77 @@
 const express = require("express");
 const multer = require("multer");
-const ftp = require("basic-ftp");
 const path = require("path");
 const cors = require("cors");
-const configCors = require("./config/configCors");
 const fs = require("fs");
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
+// configuraciones iniciales
+app.use(cors({ origin: "*" }));
 app.use(express.urlencoded({ extended: false }));
-app.use(cors(configCors));
-app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+app.use("/archivos", express.static(path.join(__dirname, "archivos-subidos")));
 app.use(express.json());
 
-const upload = multer({ dest: "uploads/" });
+// configuracion de multer
+const configuracionMulter = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, "archivos-subidos/");
+  },
+  filename: (req, file, cb) => {
+    cb(null, file.originalname);
+  },
+});
+const subir = multer({ storage: configuracionMulter });
 
-// FTP configuration
-const ftpConfig = {
-  host: "127.0.0.1",
-  user: "WindowsServer",
-  password: "Contra123",
-  secure: true, // Use secure FTP (FTPS) if needed
-  secureOptions: { rejectUnauthorized: false },
-};
+// subir archivos
+app.post("/subir", subir.single("imagen"), (req, res) => {
+  console.log("Archivo que se subio:", req.file);
 
-// Endpoint to get all uploaded images
-app.get("/images", (req, res) => {
-  const directoryPath = path.join(__dirname, "uploads");
+  if (!req.file) {
+    return res.status(400).send("No se pudo subir el archivo.");
+  }
 
-  // Read the "uploads" directory and send the file names
-  fs.readdir(directoryPath, (err, files) => {
+  res.send("El archivo se subio!");
+});
+
+// obtener los archivos subidos
+app.get("/archivos", (req, res) => {
+  const rutaArchivos = path.join(__dirname, "archivos-subidos");
+
+  fs.readdir(rutaArchivos, (err, files) => {
     if (err) {
-      return res.status(500).send("Unable to scan directory: " + err);
+      return res
+        .status(500)
+        .send("No se pudo acceder a la ruta, error: " + err);
     }
-    // Send an array of filenames
     res.send(files);
   });
 });
 
-// Handle file upload
-app.post("/upload", upload.single("imagen"), async (req, res) => {
-  const client = new ftp.Client();
-  console.log("Request body:", req.body);
-  try {
-    await client.access(ftpConfig);
-    await client.uploadFrom(req.file.path, req.file.originalname);
-    res.send("File uploaded successfully.");
-  } catch (err) {
-    console.error(err);
-    res.status(500).send("Error uploading file.");
-  } finally {
-    client.close();
-  }
-});
+// descarga de archivos
+app.post("/descargar", (req, res) => {
+  const nombreArchivo = req.body.filename;
 
-// Handle file download
-app.post("/download", async (req, res) => {
-  const client = new ftp.Client();
-  const filename = req.body.filename;
+  console.log("Archivo a descargar:", nombreArchivo);
 
-  // Log the received filename for debugging
-  console.log("Received filename:", filename);
-
-  // Check if filename is undefined or empty
-  if (!filename) {
-    return res.status(400).send("Filename is required.");
+  if (!nombreArchivo) {
+    return res.status(400).send("No se selecciono ningun archivo.");
   }
 
-  try {
-    await client.access(ftpConfig);
-    const tempLocalFilePath = path.join(__dirname, "downloads", filename);
+  const rutaArchivo = path.join(__dirname, "archivos-subidos", nombreArchivo);
 
-    // Make sure the downloads directory exists
-    if (!fs.existsSync(path.join(__dirname, "downloads"))) {
-      fs.mkdirSync(path.join(__dirname, "downloads"));
+  if (!fs.existsSync(rutaArchivo)) {
+    return res.status(404).send("No existe el archivo.");
+  }
+
+  res.download(rutaArchivo, nombreArchivo, (err) => {
+    if (err) {
+      console.error(err);
+      res.status(500).send("Error al descargar.");
     }
-
-    await client.downloadTo(tempLocalFilePath, filename);
-
-    // Send the file to the client
-    res.download(tempLocalFilePath, filename, (err) => {
-      if (err) {
-        console.error(err);
-        res.status(500).send("Error downloading file.");
-      }
-    });
-  } catch (err) {
-    console.error(err);
-    res.status(500).send("Error downloading file.");
-  } finally {
-    client.close();
-  }
+  });
 });
 
-// Start the server
 app.listen(PORT, () => {
-  console.log(`Server is running on http://localhost:${PORT}`);
+  console.log(`Server en http://localhost:${PORT}`);
 });
