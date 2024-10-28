@@ -49,19 +49,17 @@ app.get("/archivos", (req, res) => {
 });
 
 // descarga de archivos
-app.post("/descargar", (req, res) => {
-  const nombreArchivo = req.body.filename;
-
-  console.log("Archivo a descargar:", nombreArchivo);
+app.get("/descargar", (req, res) => {
+  const nombreArchivo = req.query.filename;
 
   if (!nombreArchivo) {
-    return res.status(400).send("No se selecciono ningun archivo.");
+    return res.status(400).send("No se proporciono el nombre del archivo.");
   }
 
   const rutaArchivo = path.join(__dirname, "archivos-subidos", nombreArchivo);
 
   if (!fs.existsSync(rutaArchivo)) {
-    return res.status(404).send("No existe el archivo.");
+    return res.status(404).send("No se encontro el archivo");
   }
 
   res.download(rutaArchivo, nombreArchivo, (err) => {
